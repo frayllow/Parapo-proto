@@ -1,0 +1,106 @@
+<!-- v5.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UP Ikot - Fixed Loop Tracker</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; background-color: #f8f9fa; }
+        #map { height: 450px; width: 100%; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .info-card { background: white; padding: 20px; border-radius: 12px; margin-top: 20px; }
+        h2 { color: #7b1113; }
+        ul { list-style: none; padding: 0; }
+        li { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; }
+        .stop-name { font-weight: 600; }
+        .stop-dist { font-size: 0.85em; color: #666; }
+        .eta-time { background: #7b1113; color: white; padding: 4px 12px; border-radius: 15px; font-weight: bold; }
+        /* Custom styling for the stop labels */
+        .stop-label {
+            background-color: rgba(255, 255, 255, 0.9);
+            border: 1px solid #7b1113;
+            color: #7b1113;
+            font-weight: bold;
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+        }
+
+        /* Remove the little arrow/tip from the label for a cleaner look */
+        .leaflet-tooltip-top:before {
+            border-top-color: transparent;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>UP Diliman Ikot Tracker</h2>
+    <div id="map"></div>
+
+    <div class="info-card">
+        <div id="status" style="margin-bottom:10px; font-size: 0.9em; color: green;">📡 Connecting...</div>
+        <h3>Next Sakayan Points</h3>
+        <ul id="stop-list"><li>Loading route data...</li></ul>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script type="module">
+        import { firebaseConfig, ikotRoutePoints, stops } from './config.js';
+        import { snapToRoute, updateStopList } from './tracker.js';
+
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // Centered on UP Diliman Center (Quezon Hall area)
+        const map = L.map('map').setView([14.6549, 121.0652], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        // Path Visualization
+        L.polyline(ikotRoutePoints, { color: '#7b1113', weight: 4, opacity: 0.5, dashArray: '5, 10' }).addTo(map);
+
+        // Stop Highlights
+        // Stop Highlights with Permanent Labels
+        stops.forEach(stop => {
+            // 1. Create the circle marker
+            const marker = L.circle([stop.lat, stop.lng], { 
+                color: '#0056b3', 
+                fillColor: '#007bff',
+                fillOpacity: 0.4,
+                radius: 20 
+            }).addTo(map);
+
+            // 2. Add a permanent label (Tooltip)
+            marker.bindTooltip(stop.name, {
+                permanent: true, 
+                direction: 'top',
+                className: 'stop-label', // We will style this in CSS
+                offset: [0, -10]
+            });
+        });
+
+        let driverMarker = L.marker([0, 0]).addTo(map);
+
+        database.ref('driver_01').on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                // 1. Snap coordinates to the nearest road segment
+                const snapped = snapToRoute(data.lat, data.lng, ikotRoutePoints);
+                
+                // 2. Update Marker (Map does NOT pan anymore)
+                driverMarker.setLatLng(snapped);
+
+                // 3. Update ETA list with Clockwise Logic
+                // We pass ikotRoutePoints so the function can calculate path distance
+                const listHtml = updateStopList(snapped[0], snapped[1], stops, ikotRoutePoints);
+                document.getElementById('stop-list').innerHTML = listHtml;
+                document.getElementById('status').innerText = `✅ Driver Online - ${new Date().toLocaleTimeString()}`;
+            }
+        });
+    </script>
+</body>
+</html>
