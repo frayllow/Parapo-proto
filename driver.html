@@ -29,7 +29,7 @@
 
         // Send to Firebase
         function sendLocation(lat, lng) {
-            database.ref('driver_01').set({
+            database.ref('drivers/jeep_01').set({
                 lat: lat,
                 lng: lng,
                 lastUpdated: Date.now()

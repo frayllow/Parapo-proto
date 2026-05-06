@@ -57,3 +57,19 @@ export const stops = [
     { name: "Mang Larry's Isawan", lat: 14.65032458, lng: 121.0623372 },
     { name: "Univ Ave", lat: 14.65520259, lng: 121.0623275 }
 ];
+
+// Add this to your config.js
+export const trafficZones = [
+    { 
+        name: "University Avenue Entrance", 
+        startIdx: 0, 
+        endIdx: 15, 
+        penalty: 2.0 // Usually slow due to cars entering campus
+    },
+    { 
+        name: "CP Garcia / Katipunan Exit", 
+        startIdx: 40, 
+        endIdx: 55, 
+        penalty: 2.5 // Heavy traffic near the flyover
+    }
+];

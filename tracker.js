@@ -1,9 +1,7 @@
 /**
- * v5.0
- * tracker.js - Path-Based Transit Engine
+ * v6.0
+ * tracker.js - Multi-Vehicle Engine
  */
-
-// --- INTERNAL HELPERS ---
 
 export function getDistance(lat1, lon1, lat2, lon2) {
     const R = 6371;
@@ -24,7 +22,6 @@ function getNearestPointOnSegment(p, a, b) {
     return [a[0] + atob[0] * t, a[1] + atob[1] * t];
 }
 
-// Finds which segment index (0 to N) the point is currently on
 function findNearestSegmentIndex(p, routePoints) {
     let minD = Infinity;
     let index = 0;
@@ -36,67 +33,63 @@ function findNearestSegmentIndex(p, routePoints) {
     return index;
 }
 
-// Calculates distance following the road segments
 function calculatePathDistance(latA, lngA, idxA, latB, lngB, idxB, route) {
     let total = 0;
-    // If on same segment, just straight line
     if (idxA === idxB) return getDistance(latA, lngA, latB, lngB);
-    
-    // 1. Distance to end of first segment
     total += getDistance(latA, lngA, route[idxA+1][0], route[idxA+1][1]);
-    
-    // 2. Full segments in between
     for (let i = idxA + 1; i < idxB; i++) {
         total += getDistance(route[i][0], route[i][1], route[i+1][0], route[i+1][1]);
     }
-    
-    // 3. Distance from start of last segment to target
     total += getDistance(route[idxB][0], route[idxB][1], latB, lngB);
     return total;
 }
-
-// --- EXPORTED FUNCTIONS ---
 
 export function snapToRoute(userLat, userLng, routePoints) {
     const idx = findNearestSegmentIndex([userLat, userLng], routePoints);
     return getNearestPointOnSegment([userLat, userLng], routePoints[idx], routePoints[idx+1]);
 }
 
-export function updateStopList(driverLat, driverLng, stopsArray, routePoints) {
+// NEW: Handles multiple drivers and picks the best ETA for each stop
+export function updateStopListMultiple(driversObj, stopsArray, routePoints) {
     let listHtml = "";
-    const speedKmh = 10; // Reduced for campus stop-and-go traffic
-    const driverIdx = findNearestSegmentIndex([driverLat, driverLng], routePoints);
-    const debugData = [];
+    const speedKmh = 10;
 
     stopsArray.forEach(stop => {
-        const stopIdx = findNearestSegmentIndex([stop.lat, stop.lng], routePoints);
-        let routeDist = 0;
+        let bestDist = Infinity;
+        let bestEta = Infinity;
 
-        // ONE-WAY LOGIC: Check if stop is ahead or behind
-        if (driverIdx <= stopIdx) {
-            // Stop is ahead in the array
-            routeDist = calculatePathDistance(driverLat, driverLng, driverIdx, stop.lat, stop.lng, stopIdx, routePoints);
-        } else {
-            // Stop is behind; must loop through the end back to the start
-            const distToEnd = calculatePathDistance(driverLat, driverLng, driverIdx, routePoints[routePoints.length-1][0], routePoints[routePoints.length-1][1], routePoints.length-1, routePoints);
-            const distFromStart = calculatePathDistance(routePoints[0][0], routePoints[0][1], 0, stop.lat, stop.lng, stopIdx, routePoints);
-            routeDist = distToEnd + distFromStart;
-        }
+        // Iterate through all jeeps in the Firebase 'drivers' node
+        Object.keys(driversObj).forEach(id => {
+            const jeep = driversObj[id];
+            const snapped = snapToRoute(jeep.lat, jeep.lng, routePoints);
+            const driverIdx = findNearestSegmentIndex(snapped, routePoints);
+            const stopIdx = findNearestSegmentIndex([stop.lat, stop.lng], routePoints);
+            
+            let routeDist = 0;
+            if (driverIdx <= stopIdx) {
+                routeDist = calculatePathDistance(snapped[0], snapped[1], driverIdx, stop.lat, stop.lng, stopIdx, routePoints);
+            } else {
+                const distToEnd = calculatePathDistance(snapped[0], snapped[1], driverIdx, routePoints[routePoints.length-1][0], routePoints[routePoints.length-1][1], routePoints.length-1, routePoints);
+                const distFromStart = calculatePathDistance(routePoints[0][0], routePoints[0][1], 0, stop.lat, stop.lng, stopIdx, routePoints);
+                routeDist = distToEnd + distFromStart;
+            }
 
-        const etaMinutes = Math.round((routeDist / speedKmh) * 60);
-        debugData.push({ Stop: stop.name, Distance_KM: routeDist.toFixed(3), ETA_Mins: etaMinutes });
+            const currentEta = Math.round((routeDist / speedKmh) * 60);
+            if (currentEta < bestEta) {
+                bestEta = currentEta;
+                bestDist = routeDist;
+            }
+        });
 
         listHtml += `
             <li>
                 <div class="stop-info">
                     <span class="stop-name">${stop.name}</span>
-                    <span class="stop-dist">${routeDist.toFixed(2)} km away</span>
+                    <span class="stop-dist">${bestDist.toFixed(2)} km (Nearest)</span>
                 </div>
-                <span class="eta-time">${etaMinutes > 0 ? etaMinutes : '< 1'} min</span>
+                <span class="eta-time">${bestEta > 0 ? bestEta : '< 1'} min</span>
             </li>`;
     });
 
-    console.clear();
-    console.table(debugData); // View this in F12 Console
     return listHtml;
 }
