@@ -1,93 +1,130 @@
 /**
- * v6.0
- * tracker.js - Multi-Vehicle Engine
+ * v7.0
+ * tracker.js
+ * Handles coordinate snapping, distance calculations, 
+ * and Environmental Modeling for ETAs.
  */
 
+import { trafficZones } from './config.js';
+
+/**
+ * Calculates the Haversine distance between two coordinates in kilometers.
+ */
 export function getDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371;
+    const R = 6371; // Earth's radius in km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-              Math.sin(dLon/2) * Math.sin(dLon/2);
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
 }
 
-function getNearestPointOnSegment(p, a, b) {
-    const atob = [b[0] - a[0], b[1] - a[1]];
-    const atop = [p[0] - a[0], p[1] - a[1]];
-    const len = atob[0] * atob[0] + atob[1] * atob[1];
-    let dot = atop[0] * atob[0] + atop[1] * atob[1];
-    const t = Math.min(1, Math.max(0, dot / (len || 1)));
-    return [a[0] + atob[0] * t, a[1] + atob[1] * t];
-}
-
-function findNearestSegmentIndex(p, routePoints) {
-    let minD = Infinity;
-    let index = 0;
-    for (let i = 0; i < routePoints.length - 1; i++) {
-        const closest = getNearestPointOnSegment(p, routePoints[i], routePoints[i+1]);
-        const d = Math.pow(p[0]-closest[0], 2) + Math.pow(p[1]-closest[1], 2);
-        if (d < minD) { minD = d; index = i; }
-    }
-    return index;
-}
-
-function calculatePathDistance(latA, lngA, idxA, latB, lngB, idxB, route) {
-    let total = 0;
-    if (idxA === idxB) return getDistance(latA, lngA, latB, lngB);
-    total += getDistance(latA, lngA, route[idxA+1][0], route[idxA+1][1]);
-    for (let i = idxA + 1; i < idxB; i++) {
-        total += getDistance(route[i][0], route[i][1], route[i+1][0], route[i+1][1]);
-    }
-    total += getDistance(route[idxB][0], route[idxB][1], latB, lngB);
-    return total;
-}
-
+/**
+ * Snaps a raw GPS point to the nearest coordinate in the predefined route.
+ * Returns an object with the snapped point and its index in the array.
+ */
 export function snapToRoute(userLat, userLng, routePoints) {
-    const idx = findNearestSegmentIndex([userLat, userLng], routePoints);
-    return getNearestPointOnSegment([userLat, userLng], routePoints[idx], routePoints[idx+1]);
+    let minD = Infinity;
+    let closestPoint = routePoints[0];
+    let closestIdx = 0;
+
+    routePoints.forEach((point, index) => {
+        const d = getDistance(userLat, userLng, point[0], point[1]);
+        if (d < minD) {
+            minD = d;
+            closestPoint = point;
+            closestIdx = index;
+        }
+    });
+
+    return { point: closestPoint, index: closestIdx };
 }
 
-// NEW: Handles multiple drivers and picks the best ETA for each stop
+/**
+ * ENVIRONMENTAL ENGINE:
+ * Calculates path distance multiplied by traffic penalties for specific segments.
+ */
+function getWeightedPathDistance(startIdx, endIdx, routePoints) {
+    let weightedTotal = 0;
+
+    // Iterate through the segments between the start and end index
+    for (let i = startIdx; i < endIdx; i++) {
+        const d = getDistance(
+            routePoints[i][0], routePoints[i][1],
+            routePoints[i + 1][0], routePoints[i + 1][1]
+        );
+
+        // Apply penalty if the segment index (i) falls within a traffic zone
+        const zone = trafficZones.find(z => i >= z.startIdx && i <= z.endIdx);
+        const penalty = zone ? zone.penalty : 1.0;
+
+        weightedTotal += (d * penalty);
+    }
+
+    return weightedTotal;
+}
+
+/**
+ * Updates the UI list by finding the nearest jeep for every stop
+ * and calculating the weighted ETA.
+ */
 export function updateStopListMultiple(driversObj, stopsArray, routePoints) {
+    const baseSpeed = 12; // Average Ikot speed in km/h
+    const hour = new Date().getHours();
+    
+    // Global Heuristic: General campus slowdown during peak hours
+    let timeMultiplier = 1.0;
+    if (hour >= 7 && hour <= 9) timeMultiplier = 1.4; // Morning rush
+    if (hour >= 16 && hour <= 19) timeMultiplier = 1.6; // Afternoon rush
+
     let listHtml = "";
-    const speedKmh = 10;
 
     stopsArray.forEach(stop => {
-        let bestDist = Infinity;
-        let bestEta = Infinity;
+        let bestWeightedEta = Infinity;
+        let actualDistToDisplay = Infinity;
 
-        // Iterate through all jeeps in the Firebase 'drivers' node
-        Object.keys(driversObj).forEach(id => {
-            const jeep = driversObj[id];
-            const snapped = snapToRoute(jeep.lat, jeep.lng, routePoints);
-            const driverIdx = findNearestSegmentIndex(snapped, routePoints);
-            const stopIdx = findNearestSegmentIndex([stop.lat, stop.lng], routePoints);
+        // Check every jeep in the fleet to find which one reaches THIS stop first
+        Object.values(driversObj).forEach(jeep => {
+            const jeepSnapped = snapToRoute(jeep.lat, jeep.lng, routePoints);
+            const stopSnapped = snapToRoute(stop.lat, stop.lng, routePoints);
             
-            let routeDist = 0;
-            if (driverIdx <= stopIdx) {
-                routeDist = calculatePathDistance(snapped[0], snapped[1], driverIdx, stop.lat, stop.lng, stopIdx, routePoints);
+            const jIdx = jeepSnapped.index;
+            const sIdx = stopSnapped.index;
+
+            let weightedDist = 0;
+            let rawDist = 0;
+
+            if (jIdx <= sIdx) {
+                // Jeep is behind the stop (normal path)
+                weightedDist = getWeightedPathDistance(jIdx, sIdx, routePoints);
+                rawDist = getDistance(jeep.lat, jeep.lng, stop.lat, stop.lng);
             } else {
-                const distToEnd = calculatePathDistance(snapped[0], snapped[1], driverIdx, routePoints[routePoints.length-1][0], routePoints[routePoints.length-1][1], routePoints.length-1, routePoints);
-                const distFromStart = calculatePathDistance(routePoints[0][0], routePoints[0][1], 0, stop.lat, stop.lng, stopIdx, routePoints);
-                routeDist = distToEnd + distFromStart;
+                // Jeep has passed the stop; calculate distance to end of loop + start to stop
+                const toEnd = getWeightedPathDistance(jIdx, routePoints.length - 1, routePoints);
+                const fromStart = getWeightedPathDistance(0, sIdx, routePoints);
+                weightedDist = toEnd + fromStart;
+                rawDist = getDistance(jeep.lat, jeep.lng, stop.lat, stop.lng); 
             }
 
-            const currentEta = Math.round((routeDist / speedKmh) * 60);
-            if (currentEta < bestEta) {
-                bestEta = currentEta;
-                bestDist = routeDist;
+            // ETA = (Distance / Speed) * 60 minutes * Time-of-day Factor
+            const eta = Math.round(((weightedDist / baseSpeed) * 60) * timeMultiplier);
+            
+            if (eta < bestWeightedEta) {
+                bestWeightedEta = eta;
+                actualDistToDisplay = rawDist;
             }
         });
 
+        // Generate the HTML for the stop list
         listHtml += `
             <li>
                 <div class="stop-info">
                     <span class="stop-name">${stop.name}</span>
-                    <span class="stop-dist">${bestDist.toFixed(2)} km (Nearest)</span>
+                    <span class="stop-dist">${(actualDistToDisplay).toFixed(2)} km away</span>
                 </div>
-                <span class="eta-time">${bestEta > 0 ? bestEta : '< 1'} min</span>
+                <span class="eta-time">${bestWeightedEta > 0 ? bestWeightedEta : '< 1'} min</span>
             </li>`;
     });
 

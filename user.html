@@ -1,61 +1,16 @@
-<!-- v7.0 -->
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
+    <title>UP Ikot Live Tracker</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UP Ikot - Fleet & User Tracker</title>
-    
-    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
     <style>
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            margin: 0; 
-            padding: 20px; 
-            background-color: #f8f9fa; 
-        }
-        h2 { color: #7b1113; margin-top: 0; }
-        #map { 
-            height: 450px; 
-            width: 100%; 
-            border-radius: 12px; 
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
-            border: 1px solid #ddd;
-        }
-        .info-card { 
-            background: white; 
-            padding: 20px; 
-            border-radius: 12px; 
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1); 
-            margin-top: 20px; 
-        }
-        #status { font-size: 0.9em; color: #666; margin-bottom: 15px; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f4f4f4; }
+        #map { height: 450px; width: 100%; }
+        .container { padding: 15px; }
+        .stop-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         
-        /* UI List Styling */
-        ul { list-style: none; padding: 0; margin: 0; }
-        li { 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            padding: 12px 0; 
-            border-bottom: 1px solid #eee; 
-        }
-        li:last-child { border-bottom: none; }
-        .stop-info { display: flex; flex-direction: column; }
-        .stop-name { font-weight: 600; color: #333; }
-        .stop-dist { font-size: 0.8em; color: #888; }
-        .eta-time { 
-            background: #7b1113; 
-            color: white; 
-            padding: 5px 12px; 
-            border-radius: 20px; 
-            font-weight: bold; 
-            font-size: 0.9em; 
-        }
-
-        /* Map Label Styling */
+        /* Stop Label Styling */
         .stop-label {
             background-color: rgba(255, 255, 255, 0.9);
             border: 1px solid #7b1113;
@@ -64,117 +19,75 @@
             font-size: 11px;
             padding: 2px 6px;
             border-radius: 4px;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
             white-space: nowrap;
         }
-        .leaflet-tooltip-top:before { border-top-color: transparent; }
+
+        ul { list-style: none; padding: 0; margin-top: 15px; }
+        li { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; }
+        .eta-time { background: #7b1113; color: white; padding: 4px 12px; border-radius: 20px; font-weight: bold; }
+        .stop-name { font-weight: 600; color: #333; }
+        .stop-dist { font-size: 0.85em; color: #777; }
     </style>
 </head>
 <body>
 
-    <h2>UP Diliman Ikot Tracker</h2>
     <div id="map"></div>
-
-    <div class="info-card">
-        <div id="status">📡 Connecting to UP Ikot Fleet...</div>
-        <h3>Nearest Jeep Arrivals</h3>
-        <ul id="stop-list">
-            <li>Loading real-time data...</li>
-        </ul>
+    <div class="container">
+        <div class="stop-card">
+            <h2 style="margin-top:0; color:#7b1113;">Ikot Arrivals</h2>
+            <div id="status" style="font-size: 0.8em; color: gray;">Initializing system...</div>
+            <ul id="stop-list"><li>Waiting for GPS data...</li></ul>
+        </div>
     </div>
 
-    <!-- Firebase Compat SDKs -->
+    <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
-    
-    <!-- Leaflet JS -->
+    <!-- Leaflet -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <!-- Application Logic -->
     <script type="module">
         import { firebaseConfig, ikotRoutePoints, stops } from './config.js';
         import { snapToRoute, updateStopListMultiple } from './tracker.js';
         import { startUserTracking } from './location.js';
+        // Import our new UI functions
+        import { drawRoute, drawStops, createUserIcon, createJeepIcon } from './map-ui.js';
 
-        // 1. Initialize Firebase
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
 
-        // 2. Initialize Map (Centered on UP Diliman)
         const map = L.map('map').setView([14.6549, 121.0652], 15);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap'
-        }).addTo(map);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-        // Draw the Route Path
-        L.polyline(ikotRoutePoints, {
-            color: '#7b1113',
-            weight: 3,
-            opacity: 0.5,
-            dashArray: '5, 10'
-        }).addTo(map);
+        // USE THE NEW UI FUNCTIONS
+        drawRoute(map, ikotRoutePoints);
+        drawStops(map, stops);
 
-        // Draw Stops with Labels
-        stops.forEach(stop => {
-            const marker = L.circle([stop.lat, stop.lng], {
-                color: '#0056b3',
-                fillColor: '#007bff',
-                fillOpacity: 0.4,
-                radius: 20
-            }).addTo(map);
-
-            marker.bindTooltip(stop.name, {
-                permanent: true,
-                direction: 'top',
-                className: 'stop-label',
-                offset: [0, -10]
-            });
-        });
-
-        // 3. Setup User Marker (Blue Dot)
-        const userMarker = L.marker([0, 0], {
-            icon: L.divIcon({
-                className: 'user-marker',
-                html: `<div style='background-color:#007bff; width:12px; height:12px; border-radius:50%; border:3px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.3);'></div>`,
-                iconSize: [18, 18],
-                iconAnchor: [9, 9]
-            })
-        }).addTo(map);
-
-        // Start tracking user location from location.js
+        // User Tracking
+        const userMarker = L.marker([0,0], { icon: createUserIcon() }).addTo(map);
         startUserTracking(map, userMarker);
 
-        // 4. Track Jeep Fleet
+        // Jeep Fleet
         let jeepMarkers = {};
+        const jeepIcon = createJeepIcon();
 
+        // snap drivers into route
         database.ref('drivers').on('value', (snapshot) => {
             const drivers = snapshot.val();
             if (!drivers) return;
 
-            // Update markers for each jeep in the fleet
             Object.keys(drivers).forEach(id => {
-                const pos = snapToRoute(drivers[id].lat, drivers[id].lng, ikotRoutePoints);
-                
+                const snapped = snapToRoute(drivers[id].lat, drivers[id].lng, ikotRoutePoints);
                 if (jeepMarkers[id]) {
-                    jeepMarkers[id].setLatLng(pos);
+                    jeepMarkers[id].setLatLng(snapped.point);
                 } else {
-                    jeepMarkers[id] = L.marker(pos, {
-                        icon: L.divIcon({
-                            className: 'jeep-icon',
-                            html: `<div style='background-color:#7b1113; color:white; padding:2px 6px; border-radius:50%; font-weight:bold; border:2px solid white; font-size:12px;'>J</div>`,
-                            iconSize: [25, 25],
-                            iconAnchor: [12, 12]
-                        })
-                    }).addTo(map).bindPopup(`Jeep ID: ${id}`);
+                    jeepMarkers[id] = L.marker(snapped.point, { icon: jeepIcon }).addTo(map);
                 }
             });
 
-            // Update UI list using the multi-driver logic in tracker.js
-            const listHtml = updateStopListMultiple(drivers, stops, ikotRoutePoints);
-            document.getElementById('stop-list').innerHTML = listHtml;
-            document.getElementById('status').innerText = `✅ Live: Monitoring ${Object.keys(drivers).length} Jeeps`;
+            document.getElementById('stop-list').innerHTML = updateStopListMultiple(drivers, stops, ikotRoutePoints);
+            document.getElementById('status').innerText = `✅ Fleet Live | Last Update: ${new Date().toLocaleTimeString()}`;
         });
     </script>
-
 </body>
 </html>

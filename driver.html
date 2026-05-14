@@ -1,51 +1,100 @@
+<!-- v8.0 -->
+
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Driver Side</title>
+    <title>Driver Console - UP Ikot</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { font-family: sans-serif; margin: 0; background: #1a1a1a; color: white; }
+        #map { height: 60vh; width: 100%; }
+        .controls { padding: 20px; text-align: center; }
+        .status-badge { 
+            background: #28a745; padding: 10px; border-radius: 8px; 
+            font-weight: bold; margin-bottom: 10px; display: inline-block;
+        }
+        /* Style for Traffic Polyline */
+        .traffic-line { stroke-dasharray: 10, 10; animation: dash 5s linear infinite; }
+        @keyframes dash { to { stroke-dashoffset: -100; } }
+    </style>
 </head>
 <body>
-    <h2>Driver GPS Status</h2>
-    <div id="status">Waiting for GPS...</div>
-    <div id="data-display">Coordinates will appear here.</div>
+
+    <div id="map"></div>
+    <div class="controls">
+        <div class="status-badge" id="conn-status">OFFLINE</div>
+        <h2 id="driver-id">Jeep ID: --</h2>
+        <p id="speed-display">Speed: 0 km/h</p>
+    </div>
 
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <script>
-        // PASTE YOUR CONFIG HERE
-        const firebaseConfig = {
-            apiKey: "AIzaSyDnfZ2xTSC1oCc2REyjRzQ8f5NAejHtJiI",
-            authDomain: "parapo-proto.firebaseapp.com",
-            databaseURL: "https://parapo-proto-default-rtdb.asia-southeast1.firebasedatabase.app",
-            projectId: "parapo-proto",
-            storageBucket: "parapo-proto.firebasestorage.app",
-            messagingSenderId: "561177127937",
-            appId: "1:561177127937:web:17389e46ae0713c7906400"
-        };
+    <script type="module">
+        import { firebaseConfig, ikotRoutePoints, trafficZones, stops } from './config.js';
+        import { snapToRoute, getDistance } from './tracker.js';
+        import { createJeepIcon, drawRoute, drawStops} from './map-ui.js';
 
-        // Initialize
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
+        
+        // FOR TESTING: Change this to jeep_02, etc.
+        const MY_DRIVER_ID = "jeep_01"; 
+        document.getElementById('driver-id').innerText = `ID: ${MY_DRIVER_ID}`;
 
-        // Send to Firebase
-        function sendLocation(lat, lng) {
-            database.ref('drivers/jeep_01').set({
-                lat: lat,
-                lng: lng,
-                lastUpdated: Date.now()
+        const map = L.map('map').setView([14.6549, 121.0652], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        // 1. Draw Traffic Highlights for Driver
+        trafficZones.forEach(zone => {
+            const zonePoints = ikotRoutePoints.slice(zone.startIdx, zone.endIdx + 1);
+            L.polyline(zonePoints, {
+                color: zone.penalty > 2 ? 'red' : 'yellow',
+                weight: 8,
+                opacity: 0.6
+            }).addTo(map).bindPopup(`Traffic: ${zone.name}`);
+        });
+
+        drawRoute(map, ikotRoutePoints);
+        drawStops(map, stops);
+
+        // GPS Tracking
+        navigator.geolocation.watchPosition((pos) => {
+            const { latitude, longitude, speed } = pos.coords;
+            const kmh = Math.round((speed || 0) * 3.6);
+            document.getElementById('speed-display').innerText = `Speed: ${kmh} km/h`;
+            document.getElementById('conn-status').innerText = "ONLINE";
+            document.getElementById('conn-status').style.background = "#28a745";
+
+            // Update Firebase
+            database.ref(`drivers/${MY_DRIVER_ID}`).set({
+                lat: latitude,
+                lng: longitude,
+                speed: kmh,
+                lastSeen: Date.now()
             });
-            document.getElementById('data-display').innerText = `Lat: ${lat}, Lng: ${lng}`;
-            document.getElementById('status').innerText = "Status: Sending live data...";
-        }
+        }, (err) => console.error(err), { enableHighAccuracy: true });
 
-        // Get Browser GPS
-        if (navigator.geolocation) {
-            navigator.geolocation.watchPosition((pos) => {
-                sendLocation(pos.coords.latitude, pos.coords.longitude);
-            }, (err) => {
-                document.getElementById('status').innerText = "Error: GPS Access Denied";
-            }, { enableHighAccuracy: true });
-        }
+        // Jeep Fleet
+        let jeepMarkers = {};
+        const jeepIcon = createJeepIcon();
+
+        database.ref('drivers').on('value', (snapshot) => {
+            const drivers = snapshot.val();
+            if (!drivers) return;
+
+            Object.keys(drivers).forEach(id => {
+                const snapped = snapToRoute(drivers[id].lat, drivers[id].lng, ikotRoutePoints);
+                if (jeepMarkers[id]) {
+                    jeepMarkers[id].setLatLng(snapped.point);
+                } else {
+                    const isMe = id === MY_DRIVER_ID;
+                    jeepMarkers[id] = L.marker(snapped.point, { icon: createJeepIcon(isMe ? 'blue' : 'maroon') }).addTo(map).bindPopup(isMe ? "YOU" : `Jeep: ${id}`);
+                }
+            });
+        });
     </script>
 </body>
 </html>

@@ -58,18 +58,24 @@ export const stops = [
     { name: "Univ Ave", lat: 14.65520259, lng: 121.0623275 }
 ];
 
-// Add this to your config.js
+// config.js
 export const trafficZones = [
     { 
-        name: "University Avenue Entrance", 
-        startIdx: 0, 
-        endIdx: 15, 
-        penalty: 2.0 // Usually slow due to cars entering campus
+        name: "GT-Vinzons Bottleneck", 
+        startIdx: 8,  // Starting from Ilang-Ilang RH
+        endIdx: 11, // Ending at Vinzons
+        penalty: 2.2 // High pedestrian and vehicle crossing traffic
     },
     { 
-        name: "CP Garcia / Katipunan Exit", 
-        startIdx: 40, 
-        endIdx: 55, 
-        penalty: 2.5 // Heavy traffic near the flyover
+        name: "Science Complex Slowdown", 
+        startIdx: 17, // Starting from EEEI
+        endIdx: 19, // Past NIGS
+        penalty: 1.5 // Frequent stops for students
+    },
+    { 
+        name: "University Ave Entrance", 
+        startIdx: 24, // Mang Larry's area
+        endIdx: 26, // Univ Ave
+        penalty: 1.8 // Entering/Exiting cars
     }
 ];
