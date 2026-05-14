@@ -1,0 +1,77 @@
+<!-- v1.1 of index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ParaPo - UP Ikot Tracker</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { 
+            font-family: 'Segoe UI', sans-serif; 
+            background: #7b1113; /* UP Maroon */
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        .container { text-align: center; padding: 20px; }
+        h1 { font-size: 2.5em; margin-bottom: 10px; }
+        p { margin-bottom: 30px; opacity: 0.9; }
+        
+        .btn {
+            display: block;
+            width: 250px;
+            padding: 15px;
+            margin: 15px auto;
+            border: none;
+            border-radius: 50px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.1s ease-in-out;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            position: relative;
+            top: 0;
+        }
+
+        .btn-driver { background: #ffcc00; color: #7b1113; }
+        .btn-user { background: white; color: #7b1113; }
+
+        /* Hover Effect: Enlarges the button */
+        .btn:hover {
+            transform: scale(1.08);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+
+        /* Active/Click Effect: Pushed down feel */
+        .btn:active {
+            transform: scale(0.95);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            top: 3px; /* Physically shifts it down slightly */
+        }
+
+        .version-tag {
+            margin-top: 40px;
+            font-size: 0.8em;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ParaPo!</h1>
+        <p>Real-time UP Ikot Tracking</p>
+        
+        <a href="user.html" class="btn btn-user">I am a Passenger</a>
+        <a href="driver.html" class="btn btn-driver">I am a Driver</a>
+        
+        <div class="version-tag">
+            Project ParaPo-proto v1.1
+        </div>
+    </div>
+</body>
+</html>
