@@ -26,6 +26,10 @@
         <div class="status-badge" id="conn-status">OFFLINE</div>
         <h2 id="driver-id">Jeep ID: --</h2>
         <p id="speed-display">Speed: 0 km/h</p>
+        <div class="stat-card">
+            <span class="stat-label">Occupancy:</span>
+            <span class="stat-value" id="passenger-display">0</span>
+        </div>
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -87,6 +91,14 @@
 
             Object.keys(drivers).forEach(id => {
                 const snapped = snapToRoute(drivers[id].lat, drivers[id].lng, ikotRoutePoints);
+                const pCount = drivers[id].passengers || 0;
+                console.log(`Passenger Count ${id} is:`, pCount);
+
+                // If the ID matches your specific jeep, update the dashboard text
+                if (id === MY_DRIVER_ID) {
+                    document.getElementById('passenger-display').innerHTML = pCount;
+                }
+
                 if (jeepMarkers[id]) {
                     jeepMarkers[id].setLatLng(snapped.point);
                 } else {
