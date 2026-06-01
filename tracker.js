@@ -1,8 +1,8 @@
 /**
- * v8.6 - Optimized Multi-Jeep Queue Engine
+ * v8.9 - Robust Multi-Jeep Queue Engine
  * tracker.js
  * Handles coordinate snapping, distance calculations, 
- * and loop-aware queue tracking for the next 3 oncoming jeeps.
+ * and loop-aware queue tracking for oncoming jeeps with safety guards.
  */
 
 import { trafficZones } from './config.js';
@@ -11,6 +11,7 @@ import { trafficZones } from './config.js';
  * Calculates the Haversine distance between two coordinates in kilometers.
  */
 export function getDistance(lat1, lon1, lat2, lon2) {
+    if (lat1 === undefined || lon1 === undefined || lat2 === undefined || lon2 === undefined) return Infinity;
     const R = 6371; // Earth's radius in km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
@@ -23,12 +24,16 @@ export function getDistance(lat1, lon1, lat2, lon2) {
 
 /**
  * Snaps a raw GPS point to the nearest coordinate in the predefined route.
- * Returns an object with the snapped point and its index in the array.
  */
 export function snapToRoute(userLat, userLng, routePoints) {
     let minD = Infinity;
     let closestPoint = routePoints[0];
     let closestIdx = 0;
+
+    // Safety fallback for empty/invalid coordinates
+    if (userLat === undefined || userLng === undefined || isNaN(userLat) || isNaN(userLng)) {
+        return { point: routePoints[0], index: 0 };
+    }
 
     routePoints.forEach((point, index) => {
         const d = getDistance(userLat, userLng, point[0], point[1]);
@@ -43,16 +48,24 @@ export function snapToRoute(userLat, userLng, routePoints) {
 }
 
 /**
- * ENVIRONMENTAL ENGINE:
  * Calculates total route path distance with dynamic wrap-around logic,
  * multiplying segment distances by traffic penalties.
  */
-export function getWeightedPathDistance(startIdx, endIdx, routePoints) {
-    let weightedTotal = 0;
+/**
+ * Calculates total travel time in minutes segment-by-segment,
+ * factoring in a jeep's current speed and traffic penalties.
+ */
+export function getWeightedTravelTime(startIdx, endIdx, routePoints, currentJeepSpeed = 12) {
+    let totalMinutes = 0;
     const len = routePoints.length;
     let i = startIdx;
 
-    // Traverse index-by-index until we reach the destination stop
+    // Standard baseline check: Fallback to  km/h if speed is zero, text, or negative
+    let baseSpeedKmh = Number(currentJeepSpeed);
+    if (isNaN(baseSpeedKmh) || baseSpeedKmh <= 0) {
+        baseSpeedKmh = 6; 
+    }
+
     while (i % len !== endIdx) {
         const current = i % len;
         const next = (i + 1) % len;
@@ -62,23 +75,26 @@ export function getWeightedPathDistance(startIdx, endIdx, routePoints) {
             routePoints[next][0], routePoints[next][1]
         );
 
-        // Apply penalty if the current segment falls inside an active traffic zone
         const zone = trafficZones.find(z => current >= z.startIdx && current <= z.endIdx);
         const penalty = zone ? zone.penalty : 1.0;
 
-        weightedTotal += (d * penalty);
+        // Time (hours) = Distance / Speed. Multiply by 60 for minutes, then apply penalty factor.
+        const segmentTimeMinutes = (d / baseSpeedKmh) * 60 * penalty;
+        
+        totalMinutes += segmentTimeMinutes;
         i++;
     }
 
-    return weightedTotal;
+    return totalMinutes; // This function now returns total travel minutes directly!
 }
 
 /**
  * Compiles a sorted array of the next oncoming jeeps targeting a given stop.
- * Returns up to 3 active vehicles with their loop-aware ETE and BLE passenger counts.
+ */
+/**
+ * Compiles a sorted array of the next oncoming jeeps targeting a given stop.
  */
 export function getOncomingQueueForStop(driversObj, stop, routePoints) {
-    const baseSpeed = 12; // Average speed in km/h
     const hour = new Date().getHours();
     
     let timeMultiplier = 1.0;
@@ -90,33 +106,88 @@ export function getOncomingQueueForStop(driversObj, stop, routePoints) {
     const sIdx = stopSnapped.index;
 
     const queue = Object.entries(driversObj)
-        .filter(([_, jeep]) => (now - (jeep.lastSeen || 0)) <= 60000) // Active only
+        .filter(([_, jeep]) => {
+            // Strict Activity Guard: must have coordinates and a valid recent timestamp
+            if (!jeep || jeep.lat === undefined || jeep.lng === undefined) return false;
+            const lastSeen = Number(jeep.lastSeen);
+            if (isNaN(lastSeen)) return false;
+            return (now - lastSeen) <= 120000; // Heartbeat check
+        })
         .map(([id, jeep]) => {
             const jeepSnapped = snapToRoute(jeep.lat, jeep.lng, routePoints);
             const jIdx = jeepSnapped.index;
 
-            const weightedDist = getWeightedPathDistance(jIdx, sIdx, routePoints);
+            // 💡 NEW DROPPED-IN LOGIC:
+            // Passes live speed into the function, which returns total travel minutes directly.
+            const travelTimeMinutes = getWeightedTravelTime(jIdx, sIdx, routePoints, jeep.speed);
+            
+            // Apply peak time-of-day multipliers and round to clean integers
+            const finalEta = Math.round(travelTimeMinutes * timeMultiplier);
             const rawDist = getDistance(jeep.lat, jeep.lng, stop.lat, stop.lng);
-
-            // Compute math
-            const eta = Math.round(((weightedDist / baseSpeed) * 60) * timeMultiplier);
 
             return {
                 id,
-                eta: eta > 0 ? eta : 0,
+                eta: finalEta > 0 ? finalEta : 0,
                 passengers: jeep.passengers || 0,
                 speed: jeep.speed || 0,
                 distance: rawDist
             };
         });
 
-    // Sort queue by ETA ascending (earliest arrival first)
     return queue.sort((a, b) => a.eta - b.eta).slice(0, 3);
 }
 
 /**
- * Updates the UI list by finding the nearest jeep for every stop
- * and calculating the loop-aware weighted ETA.
+ * Identifies the driver's next immediate upcoming stop along the one-way loop
+ * and calculates the ETA in minutes to reach it using our travel time engine.
+ */
+export function getNextStopETAForDriver(driverLat, driverLng, stopsArray, routePoints, driverSpeed = 12) {
+    if (driverLat === undefined || driverLng === undefined || !stopsArray.length) {
+        return { name: "Unknown", eta: "--" };
+    }
+
+    const driverSnapped = snapToRoute(driverLat, driverLng, routePoints);
+    const dIdx = driverSnapped.index;
+
+    let closestStop = null;
+    let minTimeCalculated = Infinity;
+
+    // Time-of-day peak penalty multiplier context
+    const hour = new Date().getHours();
+    let timeMultiplier = 1.0;
+    if (hour >= 7 && hour <= 9) timeMultiplier = 1.4; // Morning peak
+    if (hour >= 16 && hour <= 19) timeMultiplier = 1.6; // Afternoon peak
+
+    stopsArray.forEach(stop => {
+        const stopSnapped = snapToRoute(stop.lat, stop.lng, routePoints);
+        const sIdx = stopSnapped.index;
+
+        // 💡 UPDATED LOGIC:
+        // Pass the driver's live speed into the function. It returns travel time in minutes directly,
+        // factoring in any segment-by-segment traffic penalties along the way!
+        const travelTimeMinutes = getWeightedTravelTime(dIdx, sIdx, routePoints, driverSpeed);
+
+        // We find the stop with the smallest forward travel time. If travelTimeMinutes is near 0, 
+        // the driver is right at that stop, so we find the next upcoming stop to prevent target-lock.
+        if (travelTimeMinutes > 0.05 && travelTimeMinutes < minTimeCalculated) {
+            minTimeCalculated = travelTimeMinutes;
+            closestStop = stop;
+        }
+    });
+
+    if (!closestStop) return { name: "Terminal", eta: "--" };
+
+    // Apply peak-hour time multiplier to the pre-calculated travel minutes
+    const finalEta = Math.round(minTimeCalculated * timeMultiplier);
+
+    return {
+        name: closestStop.name,
+        eta: finalEta > 0 ? `${finalEta} min` : "< 1 min"
+    };
+}
+
+/**
+ * Updates the UI list by tracking multiple oncoming jeep assets
  */
 export function updateStopListMultiple(driversObj, stopsArray, routePoints) {
     let listHtml = "";
@@ -138,8 +209,6 @@ export function updateStopListMultiple(driversObj, stopsArray, routePoints) {
 
         const nextJeep = oncomingQueue[0];
         const displayEta = nextJeep.eta > 0 ? `${nextJeep.eta} min` : `< 1 min`;
-
-        // Display how many other jeeps are trailing behind in the tooltip summary
         const alternativeCount = oncomingQueue.length - 1;
         const alternativeSummary = alternativeCount > 0 
             ? ` • +${alternativeCount} trailing jeep(s)` 

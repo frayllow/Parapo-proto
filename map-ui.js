@@ -3,6 +3,9 @@
  * Handles all visual decorations on the Leaflet map.
  */
 
+import { snapToRoute, getWeightedTravelTime } from './tracker.js';
+import { ikotRoutePoints } from './config.js';
+
 export function drawRoute(map, routePoints) {
     return L.polyline(routePoints, {
         color: '#7b1113', // UP Maroon
@@ -12,20 +15,74 @@ export function drawRoute(map, routePoints) {
     }).addTo(map);
 }
 
+/**
+ * Draws the passenger stops onto the driver's map and attaches an
+ * interactive live ETA popup calculator to each marker pin.
+ */
 export function drawStops(map, stops) {
     stops.forEach(stop => {
-        // 1. Draw the blue circle for the "Sakayan"
-        const marker = L.circle([stop.lat, stop.lng], {
-            color: '#0056b3',
-            fillColor: '#007bff',
-            fillOpacity: 0.4,
-            radius: 20
-        }).addTo(map);
+        // 1. Plot the standard stop marker pin onto the map layout
+        const stopMarker = L.marker([stop.lat, stop.lng]).addTo(map);
 
-        // 2. Add the permanent Label (Tooltip)
-        // 2. Change Tooltip to Popup
-        // This makes the label hidden until the user clicks the circle
-        marker.bindPopup(`<b>${stop.name}</b>`);
+        // 2. Attach the click event listener right onto the marker instance
+        stopMarker.on('click', function() {
+            let driverLat = 14.6549; // Standard map center fallback default
+            let driverLng = 121.0652;
+            let driverSpeed = 0;
+
+            // Find the driver's custom marker instance on the map to extract live coordinates
+            // This searches through Leaflet's internal map layers for your "YOU" marker
+            map.eachLayer(layer => {
+                // If the layer is a marker and its popup explicitly marks it as the driver
+                if (layer instanceof L.Marker && layer.getPopup() && layer.getPopup().getContent() === "YOU") {
+                    const loc = layer.getLatLng();
+                    driverLat = loc.lat;
+                    driverLng = loc.lng;
+                }
+            });
+
+            // 3. Snap both positions to your track indices
+            const driverSnapped = snapToRoute(driverLat, driverLng, ikotRoutePoints);
+            const stopSnapped = snapToRoute(stop.lat, stop.lng, ikotRoutePoints);
+            
+            // 4. Calculate live segment-by-segment minutes
+            const rawMinutes = getWeightedTravelTime(driverSnapped.index, stopSnapped.index, ikotRoutePoints, driverSpeed);
+            
+            // 5. Apply time-of-day multipliers matching peak constraints
+            const hour = new Date().getHours();
+            let timeMultiplier = 1.0;
+            if (hour >= 7 && hour <= 9) timeMultiplier = 1.4; // Morning peak
+            if (hour >= 16 && hour <= 19) timeMultiplier = 1.6; // Afternoon peak
+            const finalEta = Math.round(rawMinutes * timeMultiplier);
+
+            // 6. Hardcoded space left open for your upcoming passenger toggle interactions
+            const passengersWaitingHere = 0;
+
+            // 7. FIX: Create and open a dynamic popup on the fly instead of binding it permanently!
+            L.popup()
+                .setLatLng([stop.lat, stop.lng])
+                .setContent(`
+                    <div style="font-family: sans-serif; padding: 4px; min-width: 175px; color: #1a1a1a;">
+                        <h4 style="margin: 0 0 4px 0; color: #800000; font-size: 14px;">${stop.name}</h4>
+                        <hr style="border: 0; border-top: 1px solid #ddd; margin: 4px 0;">
+                        
+                        <p style="margin: 4px 0; font-size: 13px;">
+                            <strong>⏱️ Your ETA:</strong> 
+                            <span style="color: #2e7d32; font-weight: bold;">
+                                ${finalEta > 0 ? `${finalEta} min` : "< 1 min"}
+                            </span>
+                        </p>
+                        
+                        <p style="margin: 4px 0; font-size: 13px; display: flex; justify-content: space-between; align-items: center;">
+                            <span><strong>🙋 Waiting:</strong></span>
+                            <span style="background: #757575; color: white; padding: 1px 6px; border-radius: 10px; font-size: 11px; font-weight: bold;">
+                                ${passengersWaitingHere}
+                            </span>
+                        </p>
+                    </div>
+                `)
+                .openOn(map); // Using openOn(map) automatically closes any other open popups safely!
+        });
     });
 }
 

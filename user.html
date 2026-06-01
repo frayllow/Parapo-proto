@@ -1,4 +1,3 @@
-<!-- v8.8 - Clean Map-Centric Passenger View with Nearest Stop Pre-Assignment -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -8,216 +7,48 @@
     <style>
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            margin: 0; 
-            background: #111; 
-            color: white;
-            overflow: hidden;
-            height: 100vh;
-            width: 100vw;
+            margin: 0; background: #111; color: white;
+            overflow: hidden; height: 100vh; width: 100vw;
         }
-        
-        #map { 
-            height: 100vh; 
-            width: 100%; 
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1;
-        }
-        
-        .nav-header {
-            position: absolute;
-            top: 15px;
-            left: 15px;
-            z-index: 1000;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
+        #map { height: 100vh; width: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+        .nav-header { position: absolute; top: 15px; left: 15px; z-index: 1000; display: flex; align-items: center; gap: 10px; }
         .back-btn {
-            background: rgba(26, 26, 26, 0.9);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 30px;
-            text-decoration: none;
-            font-size: 13px;
-            font-weight: bold;
-            border: 1px solid #444;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-            transition: all 0.2s ease;
-            backdrop-filter: blur(4px);
+            background: rgba(26, 26, 26, 0.9); color: white; padding: 10px 20px; border-radius: 30px;
+            text-decoration: none; font-size: 13px; font-weight: bold; border: 1px solid #444;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4); transition: all 0.2s ease; backdrop-filter: blur(4px);
         }
-        .back-btn:hover { 
-            background: #7b1113; 
-            border-color: #7b1113;
-            transform: translateY(-2px);
-        }
-
+        .back-btn:hover { background: #7b1113; border-color: #7b1113; transform: translateY(-2px); }
         .status-pill {
-            background: rgba(40, 167, 69, 0.9);
-            color: white;
-            padding: 8px 16px;
-            border-radius: 30px;
-            font-size: 11px;
-            font-weight: bold;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-            border: 1px solid rgba(255,255,255,0.1);
-            backdrop-filter: blur(4px);
-            white-space: nowrap;
+            background: rgba(40, 167, 69, 0.9); color: white; padding: 8px 16px; border-radius: 30px;
+            font-size: 11px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(4px); white-space: nowrap;
         }
-
-        /* Instructions Banner at the bottom on load */
         .instruction-banner {
-            position: absolute;
-            bottom: 25px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 1000;
-            background: rgba(26, 26, 26, 0.95);
-            border: 1px solid #444;
-            padding: 12px 24px;
-            border-radius: 30px;
-            font-size: 13px;
-            font-weight: 500;
-            text-align: center;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
-            backdrop-filter: blur(8px);
-            pointer-events: none;
-            transition: opacity 0.4s ease, transform 0.4s ease;
-            white-space: nowrap;
+            position: absolute; bottom: 25px; left: 50%; transform: translateX(-50%); z-index: 1000;
+            background: rgba(26, 26, 26, 0.95); border: 1px solid #444; padding: 12px 24px; border-radius: 30px;
+            font-size: 13px; font-weight: 500; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+            backdrop-filter: blur(8px); pointer-events: none; transition: opacity 0.4s ease, transform 0.4s ease; white-space: nowrap;
         }
-        .instruction-banner.hidden {
-            opacity: 0;
-            transform: translate(-50%, 20px);
-        }
-
-        /* Modern Slide-Up focused 3-Jeep queue card */
+        .instruction-banner.hidden { opacity: 0; transform: translate(-50%, 20px); }
         .queue-card {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translate(-50%, 150%);
-            width: 90%;
-            max-width: 480px;
-            z-index: 1001;
-            background: rgba(26, 26, 26, 0.98);
-            border: 1px solid #ffcc00;
-            padding: 18px;
-            border-radius: 16px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-            backdrop-filter: blur(10px);
-            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.1);
-            display: flex;
-            flex-direction: column;
+            position: absolute; bottom: 20px; left: 50%; transform: translate(-50%, 150%);
+            width: 90%; max-width: 480px; z-index: 1001; background: rgba(26, 26, 26, 0.98);
+            border: 1px solid #ffcc00; padding: 18px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            backdrop-filter: blur(10px); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.1);
+            display: flex; flex-direction: column;
         }
-        .queue-card.active {
-            transform: translate(-50%, 0);
-        }
-
-        .queue-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #3d3d3d;
-            padding-bottom: 10px;
-            margin-bottom: 12px;
-        }
-
-        .queue-title-area {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .queue-title {
-            font-size: 10px; 
-            text-transform: uppercase; 
-            letter-spacing: 1.5px; 
-            color: #ffcc00; 
-            font-weight: bold;
-        }
-
-        .nearest-badge {
-            background: #007bff;
-            color: white;
-            font-size: 9px;
-            font-weight: bold;
-            padding: 2px 8px;
-            border-radius: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            box-shadow: 0 2px 6px rgba(0,123,255,0.3);
-            display: none; /* Controlled dynamically */
-        }
-
-        .stop-name-display {
-            font-size: 18px; 
-            font-weight: bold; 
-            color: white;
-            margin-top: 3px;
-        }
-
-        .close-btn {
-            background: rgba(255,255,255,0.05); 
-            border: 1px solid #444; 
-            color: #ccc; 
-            font-size: 16px; 
-            cursor: pointer;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s;
-        }
-        .close-btn:hover {
-            background: rgba(220, 53, 69, 0.2);
-            color: #dc3545;
-            border-color: #dc3545;
-        }
-
-        .queue-list {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .queue-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 0.9em;
-            padding: 10px 12px;
-            background: rgba(255, 255, 255, 0.04);
-            border-radius: 8px;
-            border: 1px solid rgba(255,255,255,0.02);
-            transition: background 0.2s;
-        }
-        .queue-item:hover {
-            background: rgba(255, 255, 255, 0.08);
-        }
-
-        .queue-rank {
-            background: #ffcc00;
-            color: #7b1113;
-            font-size: 10px;
-            font-weight: bold;
-            padding: 2px 6px;
-            border-radius: 4px;
-            margin-right: 8px;
-        }
-
-        .pax-badge {
-            font-size: 11px;
-            font-weight: bold;
-            padding: 2px 8px;
-            border-radius: 20px;
-            margin-left: 8px;
-        }
-
-        /* Color profiles for passenger count badges */
+        .queue-card.active { transform: translate(-50%, 0); }
+        .queue-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #3d3d3d; padding-bottom: 10px; margin-bottom: 12px; }
+        .queue-title-area { display: flex; align-items: center; gap: 8px; }
+        .queue-title { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #ffcc00; font-weight: bold; }
+        .nearest-badge { background: #007bff; color: white; font-size: 9px; font-weight: bold; padding: 2px 8px; border-radius: 12px; text-transform: uppercase; display: none; }
+        .stop-name-display { font-size: 18px; font-weight: bold; color: white; margin-top: 3px; }
+        .close-btn { background: rgba(255,255,255,0.05); border: 1px solid #444; color: #ccc; font-size: 16px; cursor: pointer; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        .close-btn:hover { background: rgba(220, 53, 69, 0.2); color: #dc3545; border-color: #dc3545; }
+        .queue-list { display: flex; flex-direction: column; gap: 8px; }
+        .queue-item { display: flex; justify-content: space-between; align-items: center; font-size: 0.9em; padding: 10px 12px; background: rgba(255, 255, 255, 0.04); border-radius: 8px; border: 1px solid rgba(255,255,255,0.02); }
+        .queue-rank { background: #ffcc00; color: #7b1113; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px; margin-right: 8px; }
+        .pax-badge { font-size: 11px; font-weight: bold; padding: 2px 8px; border-radius: 20px; margin-left: 8px; }
         .pax-low { background: rgba(40, 167, 69, 0.2); color: #2eef61; border: 1px solid rgba(40, 167, 69, 0.4); }
         .pax-mid { background: rgba(255, 193, 7, 0.2); color: #ffca28; border: 1px solid rgba(255, 193, 7, 0.4); }
         .pax-high { background: rgba(220, 53, 69, 0.2); color: #ff4d5a; border: 1px solid rgba(220, 53, 69, 0.4); }
@@ -225,21 +56,17 @@
 </head>
 <body>
 
-    <!-- Header UI -->
     <div class="nav-header">
         <a href="index.html" class="back-btn">← Portal</a>
         <div class="status-pill" id="system-status">● CONNECTING TO FLEET</div>
     </div>
 
-    <!-- The Interactive Map Viewport -->
     <div id="map"></div>
 
-    <!-- Dynamic Hint Banner -->
     <div class="instruction-banner" id="hint-banner">
         📍 Tap any blue <b style="color: #ffcc00;">"Sakayan"</b> point on the map to find upcoming jeeps
     </div>
 
-    <!-- Slide-up Interactive 3-Jeep Queue Card -->
     <div class="queue-card" id="focus-queue-card">
         <div class="queue-header">
             <div>
@@ -251,16 +78,11 @@
             </div>
             <button class="close-btn" onclick="closeQueue()">&times;</button>
         </div>
-        
-        <div class="queue-list" id="focus-queue-items">
-            <!-- Dynamically populated -->
-        </div>
+        <div class="queue-list" id="focus-queue-items"></div>
     </div>
 
-    <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
-    <!-- Leaflet Library -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script type="module">
@@ -270,107 +92,111 @@
         import { drawRoute, createUserIcon, createJeepIcon } from './map-ui.js';
         import { getSessionId } from './auth.js';
 
-        // 1. Setup Session Metadata
         const passengerId = getSessionId('passenger');
-        console.log(`Passenger Session initialized as ${passengerId}`);
-
         let selectedStop = null;
-        let nearestStop = null; // Stored to evaluate "Nearest" badge dynamically
+        let nearestStop = null;
         let currentFleetData = {};
         let jeepMarkers = {};
 
-        // Expose closeQueue globally so the HTML close button triggers correctly
         window.closeQueue = function() {
             selectedStop = null;
             document.getElementById('focus-queue-card').classList.remove('active');
             document.getElementById('hint-banner').classList.remove('hidden');
         };
 
-        // 2. Initialize Firebase Realtime Database
+        // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
 
-        // 3. Initialize Leaflet Map
+        // Initialize Map
         const map = L.map('map', { zoomControl: false }).setView([14.6549, 121.0652], 15);
-        
-        // Dark theme map tiles matching UP modern console layout
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-        // Draw UP Ikot Loop Route Outline
         drawRoute(map, ikotRoutePoints);
 
-        // Draw Interactive Blue Stops directly on Map with click action triggers
         stops.forEach(stop => {
             const circle = L.circle([stop.lat, stop.lng], {
-                color: '#0056b3',
-                fillColor: '#007bff',
-                fillOpacity: 0.6,
-                radius: 24,
-                weight: 2
+                color: '#0056b3', fillColor: '#007bff', fillOpacity: 0.6, radius: 24, weight: 2
             }).addTo(map);
 
-            circle.on('click', () => {
-                focusOnStop(stop);
-            });
-
-            // Smooth mouse over labels
-            circle.bindTooltip(`<b>${stop.name}</b>`, {
-                direction: 'top',
-                offset: [0, -5]
-            });
+            circle.on('click', () => { focusOnStop(stop); });
+            circle.bindTooltip(`<b>${stop.name}</b>`, { direction: 'top', offset: [0, -5] });
         });
 
-        // Overlay Traffic Slowdown Highlights (red/yellow dashings)
         trafficZones.forEach(zone => {
             const zonePoints = ikotRoutePoints.slice(zone.startIdx, zone.endIdx + 1);
-            L.polyline(zonePoints, {
-                color: zone.penalty > 2 ? '#ff4d5a' : '#ffc107',
-                weight: 6,
-                opacity: 0.45
-            }).addTo(map);
+            L.polyline(zonePoints, { color: zone.penalty > 2 ? '#ff4d5a' : '#ffc107', weight: 6, opacity: 0.45 }).addTo(map);
         });
 
-        // 4. Trace Passenger's Self GPS Location on Map
         const userMarker = L.marker([0,0], { icon: createUserIcon() }).addTo(map);
         startUserTracking(map, userMarker);
 
-        // Geolocation callback to find and pre-assign nearest stop
+        // Fallback placeholder location loop if GPS is blocked or still acquiring
+        let mockUserLat = 14.6549;
+        let mockUserLng = 121.0652;
+
         navigator.geolocation.getCurrentPosition((position) => {
-            const uLat = position.coords.latitude;
-            const uLng = position.coords.longitude;
-            
-            findAndPreAssignNearestStop(uLat, uLng);
+            mockUserLat = position.coords.latitude;
+            mockUserLng = position.coords.longitude;
+            findAndPreAssignNearestStop(mockUserLat, mockUserLng);
         }, (err) => {
-            console.warn("Could not acquire location for auto-assigning nearest stop:", err.message);
+            console.warn("GPS tracking delayed/blocked. Using default center node for auto-assignment layout.");
+            findAndPreAssignNearestStop(mockUserLat, mockUserLng);
         }, { enableHighAccuracy: true });
 
-        /**
-         * Calculates distances to all stops and auto-focuses on the closest one
-         */
         function findAndPreAssignNearestStop(userLat, userLng) {
             let minDistance = Infinity;
             let closestStop = null;
 
             stops.forEach(stop => {
                 const dist = getDistance(userLat, userLng, stop.lat, stop.lng);
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    closestStop = stop;
+                if (dist < minDistance) { 
+                    minDistance = dist; 
+                    closestStop = stop; 
                 }
             });
-
             if (closestStop) {
                 nearestStop = closestStop;
-                console.log(`Pre-assigned nearest stop: ${closestStop.name}`);
-                
-                // Only auto-focus if the user hasn't selected another stop yet
-                if (!selectedStop) {
-                    focusOnStop(closestStop);
-                }
+                if (!selectedStop) focusOnStop(closestStop);
             }
         }
 
-        // 5. Connect Real-time Firebase Sync Loops
+        // ==========================================
+        // 🛠️ EMBEDDED AUTOMATED SIMULATION ENGINE
+        // ==========================================
+        let simIndexJ2 = 0;
+        let simIndexJ3 = Math.floor(ikotRoutePoints.length / 2); // Start halfway on route loop
+
+        setInterval(() => {
+            if (!ikotRoutePoints || ikotRoutePoints.length === 0) return;
+
+            // Step indices forward along the predefined coordinate track line
+            simIndexJ2 = (simIndexJ2 + 1) % ikotRoutePoints.length;
+            simIndexJ3 = (simIndexJ3 + 1) % ikotRoutePoints.length;
+
+            const coordJ2 = ikotRoutePoints[simIndexJ2];
+            const coordJ3 = ikotRoutePoints[simIndexJ3];
+
+            // Push simulated values directly upstream to Firebase
+            database.ref('drivers/jeep_02').update({
+                lat: coordJ2[0],
+                lng: coordJ2[1],
+                passengers: 10,
+                speed: 15,
+                lastSeen: Date.now()
+            });
+
+            database.ref('drivers/jeep_03').update({
+                lat: coordJ3[0],
+                lng: coordJ3[1],
+                passengers: 17, // Triggers red occupancy badge color rule
+                speed: 0,       // Triggers default 12km/h speed logic fallback
+                lastSeen: Date.now()
+            });
+        }, 5000); // Update coordinates loop tick pace every 2 seconds
+        // ==========================================
+
+        // Listen for active drivers stream
         database.ref('drivers').on('value', (snapshot) => {
             const drivers = snapshot.val();
             const now = Date.now();
@@ -382,116 +208,71 @@
                 return;
             }
 
-            currentFleetData = drivers; // Save globally
-            
+            currentFleetData = drivers;
             let activeCount = 0;
 
             Object.keys(drivers).forEach(id => {
                 const jeep = drivers[id];
+                const lastSeenTime = jeep ? Number(jeep.lastSeen) : 0;
 
-                // Terminate stale driver markers older than 60 seconds
-                if (now - jeep.lastSeen > 60000) {
-                    if (jeepMarkers[id]) {
-                        map.removeLayer(jeepMarkers[id]);
-                        delete jeepMarkers[id];
-                    }
+                // Validate safety window criteria metrics
+                if (!jeep || isNaN(lastSeenTime) || (now - lastSeenTime > 120000) || jeep.lat === undefined || jeep.lng === undefined) {
+                    if (jeepMarkers[id]) { map.removeLayer(jeepMarkers[id]); delete jeepMarkers[id]; }
                     return;
                 }
 
                 activeCount++;
                 const snapped = snapToRoute(jeep.lat, jeep.lng, ikotRoutePoints);
-                const pCount = jeep.passengers || 0;
 
-                // Create or transition existing map icons
                 if (jeepMarkers[id]) {
                     jeepMarkers[id].setLatLng(snapped.point);
                 } else {
-                    jeepMarkers[id] = L.marker(snapped.point, { 
-                        icon: createJeepIcon('#7b1113') 
-                    }).addTo(map).bindPopup(`
-                        <b>Jeep: ${id}</b><br>
-                        Speed: ${jeep.speed || 0} km/h<br>
-                        Passengers inside: <b>${pCount} pax</b>
-                    `);
+                    jeepMarkers[id] = L.marker(snapped.point, { icon: createJeepIcon('#7b1113') }).addTo(map)
+                        .bindPopup(`<b>Jeep: ${id}</b><br>Passengers: <b>${jeep.passengers || 0} pax</b>`);
                 }
             });
 
-            if (activeCount > 0) {
-                document.getElementById('system-status').innerText = `● ${activeCount} ACTIVE JEEPS`;
-                document.getElementById('system-status').style.background = "rgba(40, 167, 69, 0.9)";
-            } else {
-                document.getElementById('system-status').innerText = "● NO JEEPS ACTIVE";
-                document.getElementById('system-status').style.background = "rgba(220, 53, 69, 0.9)";
-            }
+            document.getElementById('system-status').innerText = activeCount > 0 ? `● ${activeCount} ACTIVE JEEPS` : "● NO JEEPS ACTIVE";
+            document.getElementById('system-status').style.background = activeCount > 0 ? "rgba(40, 167, 69, 0.9)" : "rgba(220, 53, 69, 0.9)";
 
-            // Continuously update queue information if a stop is currently selected and active
-            if (selectedStop) {
-                evaluateSelectedStopQueue();
-            }
+            if (selectedStop) evaluateSelectedStopQueue();
         });
 
-        // 6. Queue Processing Interface Logic
         function focusOnStop(stop) {
             selectedStop = stop;
             map.setView([stop.lat, stop.lng], 16);
-            
-            // Toggle active interface elements
             document.getElementById('hint-banner').classList.add('hidden');
             document.getElementById('focus-queue-card').classList.add('active');
-            
             evaluateSelectedStopQueue();
         }
 
         function evaluateSelectedStopQueue() {
             if (!selectedStop) return;
+            document.getElementById('focus-stop-name').innerText = selectedStop.name;
+            document.getElementById('nearest-badge').style.display = (nearestStop && selectedStop.name === nearestStop.name) ? 'inline-block' : 'none';
 
-            const nameEl = document.getElementById('focus-stop-name');
-            const queueListEl = document.getElementById('focus-queue-items');
-            const nearestBadge = document.getElementById('nearest-badge');
-
-            nameEl.innerText = selectedStop.name;
-
-            // Manage the dynamic "Nearest" badge label mapping
-            if (nearestStop && selectedStop.name === nearestStop.name) {
-                nearestBadge.style.display = 'inline-block';
-            } else {
-                nearestBadge.style.display = 'none';
-            }
-
-            // Generate oncoming queue metrics via the segment-by-segment tracker model
             const oncomingQueue = getOncomingQueueForStop(currentFleetData, selectedStop, ikotRoutePoints);
+            const queueListEl = document.getElementById('focus-queue-items');
 
             if (oncomingQueue.length === 0) {
-                queueListEl.innerHTML = `
-                    <div style="text-align: center; font-size: 0.85em; color: #888; padding: 15px 0;">
-                        No incoming UP Ikot vehicles tracked for this stop.
-                    </div>`;
+                queueListEl.innerHTML = `<div style="text-align: center; font-size: 0.85em; color: #888; padding: 15px 0;">No incoming vehicles tracked.</div>`;
                 return;
             }
 
             let queueHtml = "";
             oncomingQueue.forEach((jeep, idx) => {
                 const rankLabels = ["1st", "2nd", "3rd"];
-                const etaDisplay = jeep.eta > 0 ? `${jeep.eta} min` : `< 1 min`;
-
-                // Handle dynamic occupancy badge styles matching driver scanner
-                let paxClass = "pax-low";
-                if (jeep.passengers >= 10 && jeep.passengers < 15) paxClass = "pax-mid";
-                if (jeep.passengers >= 15) paxClass = "pax-high";
-
+                let paxClass = jeep.passengers >= 15 ? "pax-high" : (jeep.passengers >= 10 ? "pax-mid" : "pax-low");
                 queueHtml += `
                     <div class="queue-item">
                         <div style="display: flex; align-items: center;">
                             <span class="queue-rank">${rankLabels[idx]}</span>
-                            <span style="font-weight: bold; color: white;">${jeep.id}</span>
+                            <span style="font-weight: bold;">${jeep.id}</span>
                             <span class="pax-badge ${paxClass}">${jeep.passengers} pax</span>
                         </div>
-                        <div style="font-weight: bold; color: #ffcc00; font-size: 1.1em;">
-                            ${etaDisplay}
-                        </div>
+                        <div style="font-weight: bold; color: #ffcc00; font-size: 1.1em;">${jeep.eta > 0 ? jeep.eta + ' min' : '< 1 min'}</div>
                     </div>`;
             });
-
             queueListEl.innerHTML = queueHtml;
         }
     </script>

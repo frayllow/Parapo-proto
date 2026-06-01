@@ -9,7 +9,6 @@
     <style>
         body { font-family: sans-serif; margin: 0; background: #1a1a1a; color: white; }
         #map { height: 60vh; width: 100%; }
-        .controls { padding: 20px; text-align: center; }
         .status-badge { 
             background: #28a745; padding: 10px; border-radius: 8px; 
             font-weight: bold; margin-bottom: 10px; display: inline-block;
@@ -17,18 +16,131 @@
         /* Style for Traffic Polyline */
         .traffic-line { stroke-dasharray: 10, 10; animation: dash 5s linear infinite; }
         @keyframes dash { to { stroke-dashoffset: -100; } }
+        /* 🎴 Sleek Opaque Floating Driver Info Card matching user.html focus panel */
+        .driver-focus-card {
+            position: absolute; 
+            bottom: 25px; 
+            left: 50%; 
+            transform: translateX(-50%);
+            width: 90%; 
+            max-width: 400px; 
+            z-index: 1000;
+            background: rgba(26, 26, 26, 0.95); 
+            border: 1px solid #333;
+            border-radius: 16px; 
+            padding: 18px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            backdrop-filter: blur(10px); 
+            box-sizing: border-box;
+        }
+
+        .card-header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 12px; 
+        }
+
+        .label-pill {
+            background: #7b1113; 
+            color: white; 
+            font-size: 10px; 
+            font-weight: bold;
+            padding: 3px 8px; 
+            border-radius: 12px; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px;
+        }
+
+        /* Color variant when a specific stop is manually selected by the driver */
+        .label-pill.selected-mode { 
+            background: #ffcc00; 
+            color: #7b1113; 
+        }
+
+        .clear-btn {
+            background: none; 
+            border: none; 
+            color: #aaa; 
+            font-size: 18px; 
+            cursor: pointer; 
+            padding: 0 4px; 
+            line-height: 1; 
+            transition: color 0.2s;
+        }
+        .clear-btn:hover { color: white; }
+
+        .stop-title { 
+            font-size: 1.25em; 
+            font-weight: bold; 
+            margin: 2px 0 6px 0; 
+            color: #fff; 
+        }
+
+        .eta-highlight { 
+            font-size: 2.2em; 
+            font-weight: 900; 
+            color: #ffcc00; 
+            margin: 4px 0; 
+        }
+
+        .metrics-grid { 
+            display: flex; 
+            justify-content: space-between; 
+            margin-top: 15px; 
+            border-top: 1px solid #333; 
+            padding-top: 12px; 
+        }
+
+        .metric-unit { 
+            display: flex; 
+            flex-direction: column; 
+        }
+
+        .metric-label { 
+            font-size: 10px; 
+            color: #888; 
+            text-transform: uppercase; 
+            font-weight: bold; 
+            margin-bottom: 2px; 
+        }
+
+        .metric-value { 
+            font-size: 1.15em; 
+            font-weight: bold; 
+            color: #ffcc00; 
+        }
     </style>
 </head>
 <body>
 
     <div id="map"></div>
-    <div class="controls">
-        <div class="status-badge" id="conn-status">OFFLINE</div>
-        <h2 id="driver-id">Jeep ID: --</h2>
-        <p id="speed-display">Speed: 0 km/h</p>
-        <div class="stat-card">
-            <span class="stat-label">Occupancy:</span>
-            <span class="stat-value" id="passenger-display">0</span>
+    <div style="position: absolute; top: 15px; left: 15px; z-index: 1000;">
+        <div class="status-badge" id="conn-status" style="margin: 0;">OFFLINE</div>
+    </div>
+
+    <div class="driver-focus-card">
+        <div class="card-header">
+            <span class="label-pill" id="target-mode-label">Nearest Next Stop</span>
+            <button class="clear-btn" id="btn-clear-selection" style="display: none;">&times;</button>
+        </div>
+        
+        <div class="stop-title" id="target-stop-name">Scanning Route...</div>
+        <div class="eta-highlight" id="target-stop-eta">-- mins</div>
+
+        <div class="metrics-grid">
+            <div class="metric-unit">
+                <span class="metric-label">Console ID</span>
+                <span class="metric-value" id="driver-id">--</span>
+            </div>
+            <div class="metric-unit">
+                <span class="metric-label">Current Speed</span>
+                <span class="metric-value" id="speed-display">0 km/h</span>
+            </div>
+            <div class="metric-unit">
+                <span class="metric-label">Onboard Pax</span>
+                <span class="metric-value" id="passenger-display">0</span>
+            </div>
         </div>
     </div>
 
@@ -38,11 +150,18 @@
 
     <script type="module">
         import { firebaseConfig, ikotRoutePoints, trafficZones, stops } from './config.js';
-        import { snapToRoute, getDistance } from './tracker.js';
-        import { createJeepIcon, drawRoute, drawStops} from './map-ui.js';
+        import { snapToRoute, getDistance, getNextStopETAForDriver, getWeightedTravelTime } from './tracker.js';
+        import { createJeepIcon, drawRoute, drawStops, drawTerminalFlag} from './map-ui.js';
 
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
+
+        // 👇 ADD TRACKING STATE VARIABLES RIGHT HERE:
+        let selectedStopData = null; 
+        let currentDriverLat = 14.6549;
+        let currentDriverLng = 121.0652;
+        let currentDriverSpeed = 0;
+        // 👆 ----------------------------------------
         
         // FOR TESTING: Change this to jeep_02, etc.
         const MY_DRIVER_ID = "jeep_01"; 
@@ -61,24 +180,84 @@
             }).addTo(map).bindPopup(`Traffic: ${zone.name}`);
         });
 
-        drawRoute(map, ikotRoutePoints);
+        // Passes true so both the isolated terminal section and the loop are rendered
+        drawRoute(map, ikotRoutePoints, true);
+        drawTerminalFlag(map, ikotRoutePoints);
         drawStops(map, stops);
 
+        // 👇 ADD BLOCK C RIGHT HERE (BETWEEN DRAWSTOPS AND GEOLOCATION):
+        function refreshDashboardMetrics() {
+            if (selectedStopData) {
+                // 📍 Mode 1: A stop was explicitly tapped on the map
+                document.getElementById('target-mode-label').innerText = "Selected Stop";
+                document.getElementById('target-mode-label').classList.add('selected-mode');
+                document.getElementById('btn-clear-selection').style.display = "block";
+                document.getElementById('target-stop-name').innerText = selectedStopData.name;
+
+                const snappedVehicle = snapToRoute(currentDriverLat, currentDriverLng, ikotRoutePoints);
+                const snappedStop = snapToRoute(selectedStopData.lat, selectedStopData.lng, ikotRoutePoints);
+                
+                const etaMinutes = Math.round(getWeightedTravelTime(snappedVehicle.index, snappedStop.index, ikotRoutePoints, currentDriverSpeed));
+                document.getElementById('target-stop-eta').innerText = etaMinutes > 0 ? `${etaMinutes} mins` : "< 1 min";
+            } else {
+                // 🔍 Mode 2: Default automatic tracking of the nearest stop ahead
+                document.getElementById('target-mode-label').innerText = "Nearest Next Stop";
+                document.getElementById('target-mode-label').classList.remove('selected-mode');
+                document.getElementById('btn-clear-selection').style.display = "none";
+
+                const navigationInsight = getNextStopETAForDriver(currentDriverLat, currentDriverLng, currentDriverSpeed, stops, ikotRoutePoints);
+                if (navigationInsight) {
+                    document.getElementById('target-stop-name').innerText = navigationInsight.stopName;
+                    document.getElementById('target-stop-eta').innerText = navigationInsight.eta;
+                } else {
+                    document.getElementById('target-stop-name').innerText = "Scanning Loop...";
+                    document.getElementById('target-stop-eta').innerText = "-- mins";
+                }
+            }
+        }
+
+        // Click handler for the '×' close button to unpin a selected stop
+        document.getElementById('btn-clear-selection').addEventListener('click', (e) => {
+            e.stopPropagation();
+            selectedStopData = null;
+            refreshDashboardMetrics();
+        });
+
+        // Listen for the custom event dispatched by map-ui.js when a circle stop is clicked
+        window.addEventListener('stopSelectedByDriver', (e) => {
+            selectedStopData = e.detail;
+            refreshDashboardMetrics();
+        });
+        // 👆 -------------------------------------------------------------
+
+        // GPS Tracking
         // GPS Tracking
         navigator.geolocation.watchPosition((pos) => {
             const { latitude, longitude, speed } = pos.coords;
             const kmh = Math.round((speed || 0) * 3.6);
-            document.getElementById('speed-display').innerText = `Speed: ${kmh} km/h`;
+            
+            // 👇 SWAP THE INSIDE ENTIRELY TO UPDATE OUR STATE TRACKERS:
+            currentDriverLat = latitude;
+            currentDriverLng = longitude;
+            currentDriverSpeed = kmh > 0 ? kmh : 12; // Fallback calculation baseline speed
+
+            // Update card UI labels
+            document.getElementById('speed-display').innerText = `${kmh} km/h`;
             document.getElementById('conn-status').innerText = "ONLINE";
             document.getElementById('conn-status').style.background = "#28a745";
 
-            // Update Firebase
-            database.ref(`drivers/${MY_DRIVER_ID}`).set({
+            // Run our Block C layout function to calculate and toggle between selection/nearest
+            refreshDashboardMetrics();
+            
+            // Update Firebase safely using .update() instead of rewriting the node
+            database.ref(`drivers/${MY_DRIVER_ID}`).update({
                 lat: latitude,
                 lng: longitude,
                 speed: kmh,
                 lastSeen: Date.now()
             });
+            // 👆 -------------------------------------------------------------
+
         }, (err) => console.error(err), { enableHighAccuracy: true });
 
         // Jeep Fleet
