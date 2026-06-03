@@ -89,7 +89,7 @@
         import { firebaseConfig, ikotRoutePoints, stops, trafficZones } from './config.js';
         import { snapToRoute, getOncomingQueueForStop, getDistance } from './tracker.js';
         import { startUserTracking } from './location.js';
-        import { drawRoute, createUserIcon, createJeepIcon } from './map-ui.js';
+        import { drawRoute, createUserIcon, createJeepIcon, drawTerminalFlag } from './map-ui.js';
         import { getSessionId } from './auth.js';
 
         const passengerId = getSessionId('passenger');
@@ -112,7 +112,9 @@
         const map = L.map('map', { zoomControl: false }).setView([14.6549, 121.0652], 15);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-        drawRoute(map, ikotRoutePoints);
+        // Passes false to completely skip drawing the terminal runway line segments
+        drawRoute(map, ikotRoutePoints, false);
+        drawTerminalFlag(map, ikotRoutePoints);
 
         stops.forEach(stop => {
             const circle = L.circle([stop.lat, stop.lng], {
@@ -193,10 +195,10 @@
                 speed: 0,       // Triggers default 12km/h speed logic fallback
                 lastSeen: Date.now()
             });
-        }, 5000); // Update coordinates loop tick pace every 2 seconds
+        }, 2000); // Update coordinates loop tick pace every 2 seconds
         // ==========================================
 
-        // Listen for active drivers stream
+        // Listen for active drivers stream - eto yung original
         database.ref('drivers').on('value', (snapshot) => {
             const drivers = snapshot.val();
             const now = Date.now();

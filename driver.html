@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { font-family: sans-serif; margin: 0; background: #1a1a1a; color: white; }
-        #map { height: 60vh; width: 100%; }
+        #map { height: 100vh; width: 100%; }
         .status-badge { 
             background: #28a745; padding: 10px; border-radius: 8px; 
             font-weight: bold; margin-bottom: 10px; display: inline-block;
@@ -158,8 +158,9 @@
 
         // 👇 ADD TRACKING STATE VARIABLES RIGHT HERE:
         let selectedStopData = null; 
-        let currentDriverLat = 14.6549;
-        let currentDriverLng = 121.0652;
+        // eto yung papasok ng univ ave na coordinates 
+        let currentDriverLat = 14.6546675;
+        let currentDriverLng = 121.0623341;
         let currentDriverSpeed = 0;
         // 👆 ----------------------------------------
         
@@ -250,6 +251,7 @@
             refreshDashboardMetrics();
             
             // Update Firebase safely using .update() instead of rewriting the node
+            // commenting this out temporarily for testing
             database.ref(`drivers/${MY_DRIVER_ID}`).update({
                 lat: latitude,
                 lng: longitude,
@@ -264,6 +266,7 @@
         let jeepMarkers = {};
         const jeepIcon = createJeepIcon();
 
+        // eto yung original
         database.ref('drivers').on('value', (snapshot) => {
             const drivers = snapshot.val();
             if (!drivers) return;
@@ -286,6 +289,47 @@
                 }
             });
         });
+
+        // this is for testing since the location is from the testing phone
+        // database.ref('drivers').on('value', (snapshot) => {
+        //     const drivers = snapshot.val();
+        //     if (!drivers) return;
+
+        //     Object.keys(drivers).forEach(id => {
+        //         // 👇 READ FROM FIREBASE'S TEST FIELDS (latitude/longitude) WITH FALLBACKS:
+        //         const targetLat = drivers[id].latitude !== undefined ? drivers[id].latitude : drivers[id].lat;
+        //         const targetLng = drivers[id].longitude !== undefined ? drivers[id].longitude : drivers[id].lng;
+
+        //         const snapped = snapToRoute(targetLat, targetLng, ikotRoutePoints);
+        //         const pCount = drivers[id].passengers || 0;
+        //         console.log(`Passenger Count ${id} is:`, pCount);
+
+        //         // If the ID matches your specific jeep, sync our state coordinates to the testing device data
+        //         if (id === MY_DRIVER_ID) {
+        //             document.getElementById('passenger-display').innerHTML = pCount;
+                    
+        //             // 🔄 Overwrite global tracking states with incoming Firebase test coordinates
+        //             currentDriverLat = targetLat;
+        //             currentDriverLng = targetLng;
+        //             currentDriverSpeed = drivers[id].speed_kmh !== undefined ? drivers[id].speed_kmh : 12;
+        //             console.log(`Current Driver Speed ${id} is:`, currentDriverSpeed);
+
+        //             // 👇 ADD THIS LINE TO TRACK IT IN YOUR BROWSERS CONSOLE:
+        //             console.log(`📡 [TEST DEVICE SYNC] ID: ${id} | Latitude: ${targetLat} | Longitude: ${targetLng} | Snapped Index: ${snapped.index}`);
+
+        //             // Trigger the UI panel text to recalculate using the new firebase lat2/lng2
+        //             refreshDashboardMetrics();
+        //         }
+
+        //         // Moves the icons on the map to follow lat2/lng2
+        //         if (jeepMarkers[id]) {
+        //             jeepMarkers[id].setLatLng(snapped.point);
+        //         } else {
+        //             const isMe = id === MY_DRIVER_ID;
+        //             jeepMarkers[id] = L.marker(snapped.point, { icon: createJeepIcon(isMe ? 'blue' : 'maroon') }).addTo(map).bindPopup(isMe ? "YOU" : `Jeep: ${id}`);
+        //         }
+        //     });
+        // });
     </script>
 </body>
 </html>

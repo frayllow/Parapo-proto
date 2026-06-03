@@ -6,11 +6,33 @@
 import { snapToRoute, getWeightedTravelTime } from './tracker.js';
 import { ikotRoutePoints } from './config.js';
 
-export function drawRoute(map, routePoints) {
-    return L.polyline(routePoints, {
-        color: '#7b1113', // UP Maroon
-        weight: 3,
-        opacity: 0.5,
+/**
+ * Draws the route paths selectively. Splitting the array elements 
+ * prevents continuous polylines from cutting across University Ave.
+ */
+export function drawRoute(map, routePoints, showTerminal = true) {
+    
+    // 1. If driving mode requires showing the Terminal/Loading point
+    if (showTerminal) {
+        // Points 1 to 3 -> Indices 0 to 2 are isolated right at the loading station area
+        const terminalSlice = routePoints.slice(0, 3); 
+        
+        L.polyline(terminalSlice, {
+            color: '#6c757d',    // Gray/Slate to represent terminal zone
+            weight: 4,
+            opacity: 0.8,
+            dashArray: '5, 5'   // Dashed lane line layout
+        }).addTo(map);
+    }
+
+    // 2. Map the actual operational Ikot Loop (Indices 12 to 100)
+    // This explicitly leaves indices 3 to 11 unrendered, hiding the OTW path lines!
+    const activeLoopSlice = routePoints.slice(12, 101);
+
+    return L.polyline(activeLoopSlice, {
+        color: '#7b1113', // Your signature UP Maroon
+        weight: 4,
+        opacity: 0.8,
         dashArray: '5, 10'
     }).addTo(map);
 }
@@ -22,66 +44,23 @@ export function drawRoute(map, routePoints) {
 export function drawStops(map, stops) {
     stops.forEach(stop => {
         // 1. Plot the standard stop marker pin onto the map layout
-        const stopMarker = L.marker([stop.lat, stop.lng]).addTo(map);
+        const stopMarker = L.circleMarker([stop.lat, stop.lng], {
+            radius: 10,
+            fillColor: '#7b1113', // UP Maroon
+            color: '#ffffff',     // Crisp white border
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.7
+        }).addTo(map);
 
-        // 2. Attach the click event listener right onto the marker instance
+        // 👇 ADD THIS LINE TO ENABLE NAME LABELS ON HOVER:
+        stopMarker.bindTooltip(stop.name, { direction: 'top', sticky: true });
+
+       // Attach the click event listener right onto the marker instance
+       // Dispatches the clicked stop data straight to your driver card UI instead of a popup
         stopMarker.on('click', function() {
-            let driverLat = 14.6549; // Standard map center fallback default
-            let driverLng = 121.0652;
-            let driverSpeed = 0;
-
-            // Find the driver's custom marker instance on the map to extract live coordinates
-            // This searches through Leaflet's internal map layers for your "YOU" marker
-            map.eachLayer(layer => {
-                // If the layer is a marker and its popup explicitly marks it as the driver
-                if (layer instanceof L.Marker && layer.getPopup() && layer.getPopup().getContent() === "YOU") {
-                    const loc = layer.getLatLng();
-                    driverLat = loc.lat;
-                    driverLng = loc.lng;
-                }
-            });
-
-            // 3. Snap both positions to your track indices
-            const driverSnapped = snapToRoute(driverLat, driverLng, ikotRoutePoints);
-            const stopSnapped = snapToRoute(stop.lat, stop.lng, ikotRoutePoints);
-            
-            // 4. Calculate live segment-by-segment minutes
-            const rawMinutes = getWeightedTravelTime(driverSnapped.index, stopSnapped.index, ikotRoutePoints, driverSpeed);
-            
-            // 5. Apply time-of-day multipliers matching peak constraints
-            const hour = new Date().getHours();
-            let timeMultiplier = 1.0;
-            if (hour >= 7 && hour <= 9) timeMultiplier = 1.4; // Morning peak
-            if (hour >= 16 && hour <= 19) timeMultiplier = 1.6; // Afternoon peak
-            const finalEta = Math.round(rawMinutes * timeMultiplier);
-
-            // 6. Hardcoded space left open for your upcoming passenger toggle interactions
-            const passengersWaitingHere = 0;
-
-            // 7. FIX: Create and open a dynamic popup on the fly instead of binding it permanently!
-            L.popup()
-                .setLatLng([stop.lat, stop.lng])
-                .setContent(`
-                    <div style="font-family: sans-serif; padding: 4px; min-width: 175px; color: #1a1a1a;">
-                        <h4 style="margin: 0 0 4px 0; color: #800000; font-size: 14px;">${stop.name}</h4>
-                        <hr style="border: 0; border-top: 1px solid #ddd; margin: 4px 0;">
-                        
-                        <p style="margin: 4px 0; font-size: 13px;">
-                            <strong>⏱️ Your ETA:</strong> 
-                            <span style="color: #2e7d32; font-weight: bold;">
-                                ${finalEta > 0 ? `${finalEta} min` : "< 1 min"}
-                            </span>
-                        </p>
-                        
-                        <p style="margin: 4px 0; font-size: 13px; display: flex; justify-content: space-between; align-items: center;">
-                            <span><strong>🙋 Waiting:</strong></span>
-                            <span style="background: #757575; color: white; padding: 1px 6px; border-radius: 10px; font-size: 11px; font-weight: bold;">
-                                ${passengersWaitingHere}
-                            </span>
-                        </p>
-                    </div>
-                `)
-                .openOn(map); // Using openOn(map) automatically closes any other open popups safely!
+            const event = new CustomEvent('stopSelectedByDriver', { detail: stop });
+            window.dispatchEvent(event);
         });
     });
 }
@@ -102,4 +81,38 @@ export function createJeepIcon(color = '#7b1113') {
         iconSize: [28, 28],
         iconAnchor: [14, 14]
     });
+}
+
+// Add these to the bottom of map-ui.js
+
+/**
+ * Creates a unique HTML/CSS template representing the Terminal Flag station.
+ */
+export function createTerminalIcon() {
+    return L.divIcon({
+        className: 'terminal-flag-marker',
+        html: `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                <div style="background-color: #ffcc00; color: #7b1113; font-weight: bold; font-size: 11px; padding: 3px 6px; border-radius: 4px; border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.4); white-space: nowrap;">
+                    🏁 TERMINAL
+                </div>
+                <div style="width: 2px; height: 6px; background-color: white; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"></div>
+            </div>
+        `,
+        iconSize: [60, 30],
+        iconAnchor: [30, 27] // Anchors the pin accurately directly over the road coordinate
+    });
+}
+
+/**
+ * Draws the special Terminal icon precisely onto the map layout grid.
+ */
+export function drawTerminalFlag(map, routePoints) {
+    // Index 0 corresponds exactly to Loading Point 1 in config.js
+    const terminalLocation = routePoints[0];
+    
+    return L.marker(terminalLocation, { 
+        icon: createTerminalIcon(),
+        zIndexOffset: 1000 // Ensures the flag stays layered on top of route tracks
+    }).addTo(map).bindPopup("<b>Univ Ave Jeep Terminal</b><br>Initial vehicle deployment & loading point.");
 }
